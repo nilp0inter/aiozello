@@ -4,7 +4,7 @@ from typing import Callable
 import jwt
 
 
-def current_time() -> int:
+def get_current_time() -> int:
     """An effectful function that returns the current time."""
     return int(time.time())
 
@@ -31,7 +31,7 @@ class LocalTokenManager:
         issuer: str,
         private_key_path: str,
         expiration: int = 3600,
-        get_current_time: Callable[[], int] = current_time,
+        get_current_time: Callable[[], int] = get_current_time,
     ):
         self.issuer = issuer
         with open(private_key_path, "r") as f:
