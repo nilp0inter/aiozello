@@ -14,7 +14,7 @@ def test_codec_header_encode_decode_golden():
 
 @given(
     sample_rate_hz=st.integers(min_value=0, max_value=2**16 - 1),
-    frames_per_packet=st.one_of(st.just(1), st.just(2)),
+    frames_per_packet=st.sampled_from([1, 2]),
     frame_size_ms=st.integers(min_value=0, max_value=2**8 - 1),
 )
 def test_codec_header_encode_decode_isomorphism(
