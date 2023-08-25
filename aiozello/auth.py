@@ -1,3 +1,10 @@
+"""
+This module contains the classes related to authentication.
+
+The :class:`LocalTokenManager` class is used to generate a JWT token from a private key
+stored in a local file.
+
+"""
 from typing import Callable
 import time
 
@@ -41,7 +48,16 @@ def read_private_key_from_file(path: str) -> str:
 
 
 class LocalTokenManager:
-    """A class that generates a JWT token from private key stored in a local file."""
+    """
+    A class that generates a JWT token from private key stored in a local file.
+
+    :param issuer: The issuer of the token.
+    :param private_key_path: The path to the private key file.
+    :param get_private_key: A function that returns the private key from the file path.
+    :param get_current_time: A function that returns the current time in seconds.
+    :param expiration: The expiration time of the token in seconds.
+
+    """
 
     def __init__(
         self,
