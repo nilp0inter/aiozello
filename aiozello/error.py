@@ -3,7 +3,7 @@
 #
 
 
-class TokenGenerationError(Exception):
+class TokenGenerationError(BaseException):
     """Error during token generation."""
 
 
@@ -12,85 +12,97 @@ class TokenGenerationError(Exception):
 #
 
 
-class UnknownCommandError(Exception):
+class UnknownCommandError(BaseException):
     """Server didn't recognize the command received from the client."""
 
     pass
 
 
-class InternalServerError(Exception):
+class InternalServerError(BaseException):
     """An internal error occurred within the server. If the error persists please contact us at support@zello.com"""
 
     pass
 
 
-class InvalidJsonError(Exception):
+class InvalidJsonError(BaseException):
     """The command received included malformed JSON."""
 
     pass
 
 
-class InvalidRequestError(Exception):
+class InvalidRequestError(BaseException):
     """The server couldn't recognize command format."""
 
     pass
 
 
-class NotAuthorizedError(Exception):
+class NotAuthorizedError(BaseException):
     """Username, password or token are not valid."""
 
     pass
 
 
-class NotLoggedInError(Exception):
+class InvalidUsernameError(BaseException):
+    """Username is not valid."""
+
+    pass
+
+
+class InvalidPasswordError(BaseException):
+    """Password is not valid."""
+
+    pass
+
+
+class NotLoggedInError(BaseException):
     """Server received a command before successful `logon`."""
 
     pass
 
 
-class NotEnoughParamsError(Exception):
+class NotEnoughParamsError(BaseException):
     """The command doesn't include some of the required attributes."""
 
     pass
 
 
-class ServerClosedConnectionError(Exception):
+class ServerClosedConnectionError(BaseException):
     """The connection to Zello network was closed. You can try re-connecting."""
 
     pass
 
 
-class ChannelIsNotReadyError(Exception):
+class ChannelIsNotReadyError(BaseException):
     """Channel you are trying to talk to is not yet connected. Wait for channel `online` status before sending a message."""
 
     pass
 
 
-class ListenOnlyConnectionError(Exception):
+class ListenOnlyConnectionError(BaseException):
     """The client tried to send a message over listen-only connection."""
 
     pass
 
 
-class FailedToStartStreamError(Exception):
+class FailedToStartStreamError(BaseException):
     """Unable to start the stream for unknown reason. You can try again later."""
 
     pass
 
 
-class FailedToStopStreamError(Exception):
+class FailedToStopStreamError(BaseException):
     """Unable to stop the stream for unknown reason. This error is safe to ignore."""
 
     pass
 
 
-class FailedToSendDataError(Exception):
+class FailedToSendDataError(BaseException):
     """An error occurred while trying to send stream data packet."""
 
     pass
 
 
-class InvalidAudioPacketError(Exception):
+class InvalidAudioPacketError(BaseException):
     """Malformed audio packet is received."""
 
     pass
@@ -103,6 +115,8 @@ server_error_mapping = {
     "invalid json": InvalidJsonError,
     "invalid request": InvalidRequestError,
     "not authorized": NotAuthorizedError,
+    "invalid username": InvalidUsernameError,
+    "invalid password": InvalidPasswordError,
     "not logged in": NotLoggedInError,
     "not enough params": NotEnoughParamsError,
     "server closed connection": ServerClosedConnectionError,
@@ -115,8 +129,8 @@ server_error_mapping = {
 }
 
 
-def get_exception_by_error_code(error_code):
+def get_exception_by_error_code(error_code: str) -> BaseException:
     try:
-        return server_error_mapping.get(error_code)
+        return server_error_mapping[error_code]
     except KeyError:
         raise ValueError(f"Unknown server error code: {error_code}")
