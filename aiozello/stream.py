@@ -1,5 +1,9 @@
-import struct
 from enum import Enum, auto
+import asyncio
+import struct
+
+import opuslib
+
 
 # Define the Enum for Packet Types
 class PacketType(Enum):
@@ -43,3 +47,29 @@ def decode_stream_packet(packet):
         return PacketType.IMAGE, id1, id2, data
     else:
         raise ValueError("Invalid packet type")
+
+
+class IncomingAudioStream:
+    """
+    Represents an incoming audio stream.
+
+    """
+    def __init__(self, sample_rate_hz, frames_per_packet, frame_size_ms):
+        self.sample_rate_hz = sample_rate_hz
+        self.frames_per_packet = frames_per_packet
+        self.frame_size_ms = frame_size_ms
+        self.incoming = asyncio.Queue()
+
+    async def decode(self):
+        decoder = opuslib.Decoder(self.sample_rate_hz, 1)
+        frame_size = (self.sample_rate_hz // 1000 * self.frame_size_ms) * self.frames_per_packet
+        while True:
+            packet = await self.incoming.get()
+            if packet is None:
+                break
+            yield decoder.decode(packet, frame_size)
+
+    async def drain(self):
+        while True:
+            if (await self.incoming.get()) is None:
+                return
