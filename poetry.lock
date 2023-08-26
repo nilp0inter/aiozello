@@ -883,6 +883,17 @@ files = [
 ]
 
 [[package]]
+name = "opuslib"
+version = "3.0.1"
+description = "Python bindings to the libopus, IETF low-delay audio codec"
+category = "main"
+optional = false
+python-versions = "*"
+files = [
+    {file = "opuslib-3.0.1.tar.gz", hash = "sha256:2cb045e5b03e7fc50dfefe431e3404dddddbd8f5961c10c51e32dfb69a044c97"},
+]
+
+[[package]]
 name = "packaging"
 version = "23.1"
 description = "Core utilities for Python packages"
@@ -1070,19 +1081,6 @@ crypto = ["cryptography (>=3.4.0)"]
 dev = ["coverage[toml] (==5.0.4)", "cryptography (>=3.4.0)", "pre-commit", "pytest (>=6.0.0,<7.0.0)", "sphinx (>=4.5.0,<5.0.0)", "sphinx-rtd-theme", "zope.interface"]
 docs = ["sphinx (>=4.5.0,<5.0.0)", "sphinx-rtd-theme", "zope.interface"]
 tests = ["coverage[toml] (==5.0.4)", "pytest (>=6.0.0,<7.0.0)"]
-
-[[package]]
-name = "pyogg"
-version = "0.6.14a1"
-description = "Xiph.org's Ogg Vorbis, Opus and FLAC for Python"
-category = "main"
-optional = false
-python-versions = "*"
-files = [
-    {file = "PyOgg-0.6.14a1-py2.py3-none-win32.whl", hash = "sha256:794db340fb5833afb4f493b40f91e3e0f594606fd4b31aea0ebf5be2de9da964"},
-    {file = "PyOgg-0.6.14a1-py2.py3-none-win_amd64.whl", hash = "sha256:40f79b288b3a667309890885f4cf53371163b7dae17eb17567fb24ab467eca26"},
-    {file = "PyOgg-0.6.14a1.tar.gz", hash = "sha256:8294b34aa59c90200c4630c2cc4a5b84407209141e8e5d069d7a5be358e94262"},
-]
 
 [[package]]
 name = "pytest"
@@ -1294,4 +1292,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "487bc46084e1f51078e2e380fb34f4c8c38d513debb3ebda618f0171a961d502"
+content-hash = "cb9786555a14510d12119bdd712a5fa2786f287e96ed3dabd3bc62d3737312ed"
