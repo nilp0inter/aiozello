@@ -11,13 +11,19 @@
   }:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
+      lib = nixpkgs.lib;
     in {
       formatter = pkgs.alejandra;
 
       devShells.default = pkgs.mkShell {
-        buildInputs = [
+        packages = [
           pkgs.poetry
         ];
+        LD_LIBRARY_PATH = lib.makeLibraryPath (with pkgs; [
+          libogg
+          libvorbis
+          libopus
+        ]);
       };
     });
 }
