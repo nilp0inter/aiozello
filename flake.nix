@@ -21,7 +21,6 @@
         ];
         LD_LIBRARY_PATH = lib.makeLibraryPath (with pkgs; [
           libogg
-          libvorbis
           libopus
         ]);
       };
