@@ -18,6 +18,7 @@
       devShells.default = pkgs.mkShell {
         packages = [
           pkgs.poetry
+          pkgs.ffmpeg
         ];
         LD_LIBRARY_PATH = lib.makeLibraryPath (with pkgs; [
           libopus
