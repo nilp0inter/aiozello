@@ -29,6 +29,7 @@ def make_logon_request(token, username, password, channels):
         }
     )
 
+
 decoder = None
 file_out = None
 frame_size = None
@@ -46,20 +47,22 @@ async def save_as_wav(stream_id, stream):
         temp_file.flush()
         # Use ffmpeg to convert to mp3 and read it on streaming
         process = subprocess.Popen(
-                ["ffmpeg", "-i", temp_file.name, "-f", "mp3", "-"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+            ["ffmpeg", "-i", temp_file.name, "-f", "mp3", "-"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
 
         aiohttp_session = aiohttp.ClientSession()
         data = aiohttp.FormData()
-        data.add_field("file", process.stdout, filename="output.mp3", content_type="audio/mpeg")
+        data.add_field(
+            "file", process.stdout, filename="output.mp3", content_type="audio/mpeg"
+        )
         data.add_field("model", "whisper-1")
 
         async with aiohttp_session.post(
-                "https://api.openai.com/v1/audio/transcriptions",
-                headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"},
-                data=data,
+            "https://api.openai.com/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"},
+            data=data,
         ) as response:
             print(await response.text())
 
@@ -67,6 +70,7 @@ async def save_as_wav(stream_id, stream):
 
 
 streams = dict()
+
 
 async def main(token, username, password):
     async with aiohttp.ClientSession() as session:
@@ -87,9 +91,15 @@ async def main(token, username, password):
                             pprint(data)
                         elif command == "on_stream_start":
                             codec_header = decode_codec_header(data["codec_header"])
-                            (sample_rate_hz, frames_per_packet, frame_size_ms) = codec_header
+                            (
+                                sample_rate_hz,
+                                frames_per_packet,
+                                frame_size_ms,
+                            ) = codec_header
                             stream_id = data["stream_id"]
-                            stream = IncomingAudioStream(sample_rate_hz, frames_per_packet, frame_size_ms)
+                            stream = IncomingAudioStream(
+                                sample_rate_hz, frames_per_packet, frame_size_ms
+                            )
                             streams[stream_id] = stream
                             asyncio.create_task(save_as_wav(stream_id, stream))
                             print("on_stream_start")
