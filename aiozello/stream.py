@@ -63,7 +63,34 @@ class IncomingAudioStream:
         self.sample_rate_hz = sample_rate_hz
         self.frames_per_packet = frames_per_packet
         self.frame_size_ms = frame_size_ms
-        self.incoming = asyncio.Queue()
+        
+        packet_duration_ms = frames_per_packet * frame_size_ms
+        if packet_duration_ms <= 0:
+            packet_duration_ms = 20  # fallback sane default to prevent division by zero
+        max_packets = max(1, int(10000 / packet_duration_ms))
+        
+        self.incoming = asyncio.Queue(maxsize=max_packets)
+        self.dropped_packets = 0
+
+    async def put(self, packet):
+        """
+        Puts a packet into the queue. Drops the oldest packet if the queue is full.
+        """
+        if packet is None:
+            await self.incoming.put(None)
+            return
+
+        while self.incoming.full():
+            try:
+                self.incoming.get_nowait()
+                self.dropped_packets += 1
+            except asyncio.QueueEmpty:
+                break
+
+        try:
+            self.incoming.put_nowait(packet)
+        except asyncio.QueueFull:
+            await self.incoming.put(packet)
 
     async def decode(self):
         decoder = opuslib.Decoder(self.sample_rate_hz, 1)

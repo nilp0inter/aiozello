@@ -28,7 +28,7 @@ class StreamStart:
     packet_duration: int
     stream_id: int
     channel: str
-    from_: str
+    sender: str
     key: str
     codec_header: str
 
@@ -41,7 +41,7 @@ class StreamStop:
 @dataclass(frozen=True)
 class Image:
     channel: str
-    from_: str
+    sender: str
     message_id: str
     source: str
     type: str
@@ -50,7 +50,7 @@ class Image:
 @dataclass(frozen=True)
 class Location:
     channel: str
-    from_: str
+    sender: str
     message_id: int
     latitude: float
     longitude: float
@@ -61,6 +61,6 @@ class Location:
 @dataclass(frozen=True)
 class TextMessage:
     channel: str
-    from_: str
+    sender: str
     message_id: int
     text: str
