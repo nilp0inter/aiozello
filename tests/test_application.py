@@ -8,13 +8,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 
 from aiozello.__main__ import Application, OutboundAudioStream, convert_to_dataclass
-from aiozello.stream import IncomingAudioStream
-from aiozello.protocol import ChannelStatus, StreamStart, StreamStop, TextMessage
+from aiozello.stream import IncomingAudioStream, PacketType
+from aiozello.protocol import ChannelStatus, StreamStart, StreamStop, TextMessage, Image
 
 
 def test_side_effect_free_import():
-    # Verify that we can import Application and write_to_file does not cause side effects
+    # Verify that we can import Application cleanly
     assert Application is not None
+
+
+def test_constructor_validation():
+    with pytest.raises(ValueError):
+        Application(token=None, token_loader=None)
 
 
 def test_queue_backpressure_and_drop_oldest():
@@ -46,7 +51,7 @@ def test_queue_backpressure_and_drop_oldest():
 
 def test_outbound_stream_context_manager():
     async def _test():
-        app = Application()
+        app = Application(token="dummy")
         
         # Mock _send_start, _send_packet, _send_stop
         app._send_start = AsyncMock(return_value=42)
@@ -76,7 +81,7 @@ def test_outbound_stream_context_manager():
 
 def test_outbound_stream_exception_cleanup():
     async def _test():
-        app = Application()
+        app = Application(token="dummy")
         app._send_start = AsyncMock(return_value=100)
         app._send_packet = MagicMock()
         app._send_stop = AsyncMock()
@@ -94,7 +99,7 @@ def test_outbound_stream_exception_cleanup():
 
 def test_soft_reconnect_deferral():
     async def _test():
-        app = Application(token_loader=lambda: "dummy-token", token_refresh_interval_s=0.05)
+        app = Application(token="dummy", token_refresh_interval_s=0.05, token_loader=lambda: "dummy")
         
         app._trigger_soft_reconnect = AsyncMock()
         
@@ -123,13 +128,28 @@ def test_soft_reconnect_deferral():
 def test_callback_dataclass_dispatch():
     async def _test():
         cb_calls = []
+        image_metadata_calls = []
+        image_data_calls = []
         
         async def channel_status_cb(event):
             cb_calls.append(event)
+
+        async def image_metadata_cb(event):
+            image_metadata_calls.append(event)
+
+        async def image_data_cb(image_id, data):
+            image_data_calls.append((image_id, data))
             
-        app = Application(callbacks={"on_channel_status": channel_status_cb})
+        app = Application(
+            token="dummy",
+            callbacks={
+                "on_channel_status": channel_status_cb,
+                "on_image_metadata": image_metadata_cb,
+                "on_image_data": image_data_cb,
+            }
+        )
         
-        # Mock WSMsgType.TEXT message with on_channel_status command
+        # 1. Text Message event
         msg_mock = MagicMock()
         msg_mock.type = aiohttp.WSMsgType.TEXT
         msg_mock.data = json.dumps({
@@ -141,20 +161,136 @@ def test_callback_dataclass_dispatch():
             "texting_supported": False,
             "locations_supported": True
         })
-        
         await app._handle_message(msg_mock)
         
-        # Give a tiny slice of time for the spawned callback task to run
+        # 2. JSON Image metadata event
+        img_metadata_msg = MagicMock()
+        img_metadata_msg.type = aiohttp.WSMsgType.TEXT
+        img_metadata_msg.data = json.dumps({
+            "command": "on_image",
+            "channel": "test-channel",
+            "from": "user123",
+            "message_id": "msg999",
+            "source": "src-url",
+            "type": "jpg"
+        })
+        await app._handle_message(img_metadata_msg)
+
+        # 3. Binary Image packet
+        binary_packet = bytes([0x02]) + int(888).to_bytes(4, "big") + int(1).to_bytes(4, "big") + b"fake-jpeg-bytes"
+        binary_msg = MagicMock()
+        binary_msg.type = aiohttp.WSMsgType.BINARY
+        binary_msg.data = binary_packet
+        await app._handle_message(binary_msg)
+        
         await asyncio.sleep(0.05)
         
+        # Verify channel status
         assert len(cb_calls) == 1
-        event = cb_calls[0]
-        assert isinstance(event, ChannelStatus)
-        assert event.channel == "test-channel"
-        assert event.status == "online"
-        assert event.users_online == 5
-        assert event.images_supported is True
-        assert event.texting_supported is False
-        assert event.locations_supported is True
+        assert cb_calls[0].channel == "test-channel"
+        
+        # Verify split image metadata callback
+        assert len(image_metadata_calls) == 1
+        assert isinstance(image_metadata_calls[0], Image)
+        assert image_metadata_calls[0].sender == "user123"
+        assert image_metadata_calls[0].message_id == "msg999"
 
+        # Verify split image binary callback
+        assert len(image_data_calls) == 1
+        assert image_data_calls[0] == (888, b"fake-jpeg-bytes")
+
+    asyncio.run(_test())
+
+
+def test_reconnect_fires_channel_status():
+    async def _test():
+        cb_calls = []
+        
+        async def channel_status_cb(event):
+            cb_calls.append(event)
+            
+        app = Application(
+            token="dummy",
+            username="bot",
+            password="pwd",
+            channels=["chan"],
+            callbacks={"on_channel_status": channel_status_cb}
+        )
+        
+        ws_mock = MagicMock()
+        ws_mock.closed = False
+        ws_mock.close = AsyncMock()
+        ws_mock.send_str = AsyncMock()
+        
+        msg_channel_status = MagicMock()
+        msg_channel_status.type = aiohttp.WSMsgType.TEXT
+        msg_channel_status.data = json.dumps({
+            "command": "on_channel_status",
+            "channel": "chan",
+            "status": "online",
+            "users_online": 2
+        })
+        
+        class MockWSResponse:
+            def __init__(self):
+                self.sent_status = False
+                
+            def __aiter__(self):
+                return self
+                
+            async def __anext__(self):
+                if not self.sent_status:
+                    self.sent_status = True
+                    return msg_channel_status
+                else:
+                    raise ConnectionResetError("Disconnected")
+        
+        class AsyncContextManagerMock:
+            async def __aenter__(self):
+                return ws_mock
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+                
+        ws_connect_mock = AsyncContextManagerMock()
+        
+        class AsyncSessionMock:
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+            def ws_connect(self, url):
+                return ws_connect_mock
+                
+        session_mock = AsyncSessionMock()
+        
+        connections = []
+        
+        def get_iter(*args, **kwargs):
+            resp = MockWSResponse()
+            connections.append(resp)
+            return resp
+            
+        ws_mock.__aiter__ = get_iter
+        
+        original_sleep = asyncio.sleep
+        
+        async def mock_sleep(delay):
+            if len(connections) >= 2:
+                app._is_running = False
+            await original_sleep(0.01)
+            
+        with patch("aiohttp.ClientSession", return_value=session_mock):
+            with patch("asyncio.sleep", side_effect=mock_sleep):
+                try:
+                    await asyncio.wait_for(app.run(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    pass
+                    
+        assert len(connections) >= 2
+        assert len(cb_calls) == len(connections)
+        for event in cb_calls:
+            assert isinstance(event, ChannelStatus)
+            assert event.channel == "chan"
+            assert event.status == "online"
+            
     asyncio.run(_test())

@@ -4,6 +4,7 @@ import os
 import tempfile
 import wave
 import logging
+import random
 from typing import Callable, Optional
 
 import aiohttp
@@ -98,7 +99,8 @@ KNOWN_CALLBACKS = [
     "on_stream_start",
     "on_stream_stop",
     "on_text_message",
-    "on_image",
+    "on_image_metadata",
+    "on_image_data",
     "on_location",
     "on_unknown_command",
     "on_unknown_message",
@@ -189,6 +191,9 @@ class Application:
         token_loader: Optional[Callable[[], str]] = None,
         token_refresh_interval_s: float = 3000.0,
     ):
+        if token is None and token_loader is None:
+            raise ValueError("Either token or token_loader must be provided")
+
         self.username = username
         self.password = password
         if channels is None:
@@ -332,8 +337,10 @@ class Application:
                 if not self._is_running:
                     break
 
-                logger.info(f"Disconnected. Reconnecting in {backoff:.2f} seconds...")
-                await asyncio.sleep(backoff)
+                # Apply exponential backoff with random jitter (0-25% added)
+                sleep_duration = backoff + random.uniform(0, backoff * 0.25)
+                logger.info(f"Disconnected. Reconnecting in {sleep_duration:.2f} seconds...")
+                await asyncio.sleep(sleep_duration)
                 backoff = min(60.0, backoff * 2.0)
         finally:
             if self._refresh_timer_task:
@@ -380,15 +387,12 @@ class Application:
                             await stream.put(None)
 
                     event = convert_to_dataclass(command, data)
-                    asyncio.create_task(self.callbacks[command](event))
+                    callback_name = "on_image_metadata" if command == "on_image" else command
+                    asyncio.create_task(self.callbacks[callback_name](event))
                 else:
                     await self.callbacks["on_unknown_command"](**data)
             else:
                 await self.callbacks["on_unknown_message"](**data)
-        elif msg.type == aiohttp.WSMsgType.ERROR:
-            await self.callbacks["on_ws_error"](msg)
-        elif msg.type == aiohttp.WSMsgType.CLOSED:
-            await self.callbacks["on_ws_closed"](msg)
         elif msg.type == aiohttp.WSMsgType.BINARY:
             stream_packet, id1, id2, data = decode_stream_packet(msg.data)
             if stream_packet is PacketType.AUDIO:
@@ -396,7 +400,7 @@ class Application:
                     stream = self.streams[id1]
                     await stream.put(data)
             elif stream_packet is PacketType.IMAGE:
-                await self.callbacks["on_image"](id1, data)
+                await self.callbacks["on_image_data"](id1, data)
             else:
                 await self.callbacks["on_unknown_binary"](msg.data)
         else:
@@ -405,61 +409,30 @@ class Application:
 
 if __name__ == "__main__":
     # Standard logger configuration when executed directly
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
-    async def save_as_wav(event):
-        stream = app.streams.get(event.stream_id)
-        if not stream:
-            return
-        logger.info(f"Incoming stream started: {event.stream_id} from {event.sender}")
-        with tempfile.NamedTemporaryFile(suffix=".wav") as temp_file:
-            with wave.open(temp_file.name, "wb") as file_out:
-                file_out.setnchannels(1)
-                file_out.setsampwidth(2)
-                file_out.setframerate(stream.sample_rate_hz)
-                async for pcm in stream.decode():
-                    file_out.writeframes(pcm)
-            temp_file.flush()
-            
-            # Use ffmpeg to convert to mp3 and read it on streaming
-            process = subprocess.Popen(
-                ["ffmpeg", "-i", temp_file.name, "-f", "mp3", "-"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-            )
-
-            data = aiohttp.FormData()
-            data.add_field(
-                "file", process.stdout, filename="output.mp3", content_type="audio/mpeg"
-            )
-            data.add_field("model", "whisper-1")
-
-            result = None
-            async with aiohttp.ClientSession() as aiohttp_session:
-                async with aiohttp_session.post(
-                    "https://api.openai.com/v1/audio/transcriptions",
-                    headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"},
-                    data=data,
-                ) as response:
-                    result = await response.text()
-
-            process.wait()
-            logger.info(f"Transcription result: {result}")
-            return result
+    async def on_event(event):
+        logger.info(f"Received event: {event}")
 
     issuer = os.environ.get("ZELLO_ISSUER")
-    private_key = os.environ.get("ZELLO_PRIVATE_KEY")
+    private_key_path = os.environ.get("ZELLO_PRIVATE_KEY_PATH", "./private.key")
     username = os.environ.get("ZELLO_USERNAME")
     password = os.environ.get("ZELLO_PASSWORD")
+    channel = os.environ.get("ZELLO_CHANNEL", "aiozello")
 
-    if all([issuer, private_key, username, password]):
-        ltm = LocalTokenManager(issuer, private_key)
+    if all([issuer, username, password]) and os.path.exists(private_key_path):
+        ltm = LocalTokenManager(issuer, private_key_path)
         app = Application(
             token_loader=ltm.issue,
             username=username,
             password=password,
-            callbacks={"on_stream_start": save_as_wav},
+            channels=[channel],
+            callbacks={
+                "on_channel_status": on_event,
+                "on_stream_start": on_event,
+                "on_stream_stop": on_event,
+            },
         )
         asyncio.run(app.run())
     else:
-        print("Please set ZELLO_ISSUER, ZELLO_PRIVATE_KEY, ZELLO_USERNAME, and ZELLO_PASSWORD to run test.")
+        print("Please set ZELLO_ISSUER, ZELLO_USERNAME, ZELLO_PASSWORD, and ensure private.key exists.")
