@@ -393,6 +393,8 @@ class Application:
                     await self.callbacks["on_unknown_command"](**data)
             else:
                 await self.callbacks["on_unknown_message"](**data)
+        elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE, aiohttp.WSMsgType.ERROR):
+            return  # connection-state events are handled at the run() finally block
         elif msg.type == aiohttp.WSMsgType.BINARY:
             stream_packet, id1, id2, data = decode_stream_packet(msg.data)
             if stream_packet is PacketType.AUDIO:
